@@ -263,24 +263,241 @@ cd client && npm run dev
 }
 ```
 
-## 🚀 Deployment
+## 🚀 Deployment & Updates
 
-### Client (Vercel)
-1. Connect your repository to Vercel
-2. Set environment variables in Vercel dashboard
-3. Deploy
+### Initial Deployment
 
-### Server (Railway/Heroku)
-1. Create new app on Railway or Heroku
-2. Set environment variables
-3. Deploy from GitHub
+#### Client (Vercel)
+1. Push code to GitHub repository
+2. Connect repository to Vercel
+3. Set environment variables in Vercel dashboard:
+   ```
+   NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_domain
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+   NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+   NEXT_PUBLIC_API_URL=https://your-server-domain.com
+   ```
+4. Deploy automatically
 
-### Production Considerations
-- Use production Firebase project
-- Set up proper CORS origins
-- Use HTTPS for WebRTC
-- Configure proper security rules
-- Set up monitoring and logging
+#### Server (Railway/Heroku/DigitalOcean)
+1. Choose your hosting platform
+2. Connect your repository
+3. Set environment variables:
+   ```
+   FIREBASE_PROJECT_ID=your_project_id
+   FIREBASE_PRIVATE_KEY=your_private_key
+   FIREBASE_CLIENT_EMAIL=your_client_email
+   FIREBASE_CLIENT_ID=your_client_id
+   FIREBASE_PRIVATE_KEY_ID=your_private_key_id
+   CLIENT_URL=https://your-vercel-app.vercel.app
+   PORT=5000
+   ```
+4. Deploy
+
+### Adding New Features & Updates
+
+#### Development Workflow
+```bash
+# 1. Pull latest code
+git pull origin main
+
+# 2. Create feature branch
+git checkout -b feature/new-feature-name
+
+# 3. Make your changes
+# Edit files, add features, fix bugs...
+
+# 4. Test locally
+npm run dev
+
+# 5. Commit changes
+git add .
+git commit -m "Add: new feature description"
+
+# 6. Push to GitHub
+git push origin feature/new-feature-name
+
+# 7. Create Pull Request and merge to main
+```
+
+#### Automatic Deployment
+- **Vercel**: Automatically deploys on every push to main branch
+- **Railway/Heroku**: Automatically deploys on every push to main branch
+
+#### Manual Deployment Commands
+```bash
+# Build and deploy client
+cd client
+npm run build
+vercel --prod
+
+# Build and deploy server
+cd server
+npm run build
+# Deploy to your platform
+```
+
+### Database Updates
+
+#### Firestore Schema Changes
+1. Test changes in development environment first
+2. Update Firestore security rules if needed:
+   ```javascript
+   // In Firebase Console > Firestore > Rules
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       // Add new collection rules here
+     }
+   }
+   ```
+3. Deploy rules from Firebase Console
+
+#### Migration Scripts
+Create migration scripts for data structure changes:
+```javascript
+// scripts/migrate.js
+const admin = require('firebase-admin');
+// Add migration logic
+```
+
+### Environment Management
+
+#### Multiple Environments
+- **Development**: Local environment with test Firebase project
+- **Staging**: Preview deployments for testing
+- **Production**: Live application
+
+#### Environment Variables
+```bash
+# Development (.env.local)
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=project-dev
+NEXT_PUBLIC_API_URL=http://localhost:5000
+
+# Production (Vercel Dashboard)
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=project-prod
+NEXT_PUBLIC_API_URL=https://api.yourapp.com
+```
+
+### Monitoring & Maintenance
+
+#### Performance Monitoring
+- Use Vercel Analytics for frontend performance
+- Monitor server logs in Railway/Heroku dashboard
+- Set up Firebase Performance Monitoring
+
+#### Error Tracking
+```bash
+# Add error tracking (optional)
+npm install @sentry/nextjs @sentry/node
+```
+
+#### Database Backup
+- Firestore: Enable daily backups in Firebase Console
+- Regular exports for critical data
+
+### Rollback Strategy
+
+#### If Issues Arise After Deployment
+1. **Quick Fix**: 
+   ```bash
+   git revert <commit-hash>
+   git push origin main
+   ```
+
+2. **Emergency Rollback**:
+   - Vercel: Use previous deployment from dashboard
+   - Railway/Heroku: Rollback from platform dashboard
+
+3. **Database Rollback**:
+   - Restore from Firestore backup
+   - Run reverse migration scripts
+
+### Security Considerations
+
+#### Regular Updates
+```bash
+# Update dependencies monthly
+npm audit
+npm update
+
+# Security patches
+npm audit fix
+```
+
+#### Environment Security
+- Rotate API keys every 6 months
+- Review Firestore security rules regularly
+- Monitor unusual activity in Firebase Console
+
+### Performance Optimization
+
+#### Before Major Updates
+- Run performance tests
+- Check bundle size: `npm run build`
+- Test on various devices and networks
+- Monitor Core Web Vitals
+
+## 🔄 CI/CD Pipeline (Optional Advanced Setup)
+
+### GitHub Actions
+Create `.github/workflows/deploy.yml`:
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+      - run: npm ci
+      - run: npm test
+  
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy to Vercel
+        uses: vercel/action@v1
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+```
+
+## 🚨 Troubleshooting Deployment
+
+### Common Issues
+
+#### Build Failures
+```bash
+# Clear cache and reinstall
+rm -rf node_modules package-lock.json
+npm install
+
+# Check for TypeScript errors
+npm run type-check
+```
+
+#### Environment Variables Not Working
+- Ensure variables are prefixed with `NEXT_PUBLIC_` for client-side
+- Restart deployment after adding new variables
+- Check variable names match exactly
+
+#### WebRTC Not Working in Production
+- Ensure HTTPS is enabled
+- Configure STUN/TURN servers for production
+- Check firewall settings
+
+#### Firebase Connection Issues
+- Verify project ID and credentials
+- Check Firestore rules
+- Ensure service account has correct permissions
 
 ## 🤝 Contributing
 

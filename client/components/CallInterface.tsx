@@ -10,6 +10,7 @@ interface CallInterfaceProps {
   recipientId: string;
   recipientName: string;
   onCallEnd: () => void;
+  onCallStart?: () => void;
 }
 
 interface IncomingCallData {
@@ -19,7 +20,7 @@ interface IncomingCallData {
   callerName: string;
 }
 
-export default function CallInterface({ recipientId, recipientName, onCallEnd }: CallInterfaceProps) {
+export default function CallInterface({ recipientId, recipientName, onCallEnd, onCallStart }: CallInterfaceProps) {
   const { currentUser, userProfile } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [peer, setPeer] = useState<Peer.Instance | null>(null);
@@ -108,6 +109,7 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd }:
       setCallType(type);
       setIsCallActive(true);
       setConnectionState('connecting');
+      onCallStart?.();
 
       const mediaStream = await getUserMedia(type === 'video', true);
       

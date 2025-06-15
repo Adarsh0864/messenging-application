@@ -11,13 +11,16 @@ import {
   serverTimestamp,
   doc,
   setDoc,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Search, Phone, Video, MoreVertical, Send, Paperclip, Smile, UserPlus } from 'lucide-react';
+import { Search, Phone, Video, MoreVertical, Send, Paperclip, Smile, UserPlus, LogOut, Settings, User } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import LoadingSpinner from './LoadingSpinner';
+import { toast } from 'react-hot-toast';
+import CallInterface from './CallInterface';
 
 interface Message {
   id: string;
@@ -48,7 +51,7 @@ interface Conversation {
 }
 
 export default function MessagingInterface() {
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, logout } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -58,7 +61,10 @@ export default function MessagingInterface() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -68,25 +74,27 @@ export default function MessagingInterface() {
     scrollToBottom();
   }, [messages]);
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Fetch contacts and conversations
   useEffect(() => {
     if (!currentUser) return;
 
     const fetchContacts = async () => {
       try {
-        // Get all users except current user
-        const usersQuery = query(
-          collection(db, 'users'),
-          where('uid', '!=', currentUser.uid)
-        );
-        
-        const usersSnapshot = await getDocs(usersQuery);
-        const usersData = usersSnapshot.docs.map(doc => ({
-          ...doc.data(),
-          uid: doc.id
-        })) as Contact[];
-
-        // Get conversations for current user
+        // First, get user's contacts (only people they've added or messaged)
         const conversationsQuery = query(
           collection(db, 'conversations'),
           where('userIds', 'array-contains', currentUser.uid)
@@ -98,21 +106,47 @@ export default function MessagingInterface() {
             ...doc.data()
           })) as Conversation[];
 
+          // Get unique contact UIDs from conversations
+          const contactUids = new Set<string>();
+          conversations.forEach(conv => {
+            conv.userIds.forEach(uid => {
+              if (uid !== currentUser.uid) {
+                contactUids.add(uid);
+              }
+            });
+          });
+
+          // If no contacts found, show empty state
+          if (contactUids.size === 0) {
+            setContacts([]);
+            setLoading(false);
+            return;
+          }
+
+          // Fetch contact details for each UID
+          const contactPromises = Array.from(contactUids).map(async (uid) => {
+            const userDoc = await getDoc(doc(db, 'users', uid));
+            if (userDoc.exists()) {
+              return { uid, ...userDoc.data() } as Contact;
+            }
+            return null;
+          });
+
+          const contactsData = (await Promise.all(contactPromises)).filter(Boolean) as Contact[];
+
           // Enrich contacts with conversation data
-          const enrichedContacts = await Promise.all(
-            usersData.map(async (user) => {
-              const conversation = conversations.find(conv => 
-                conv.userIds.includes(user.uid)
-              );
-              
-              return {
-                ...user,
-                lastMessage: conversation?.lastMessage || '',
-                lastMessageTime: conversation?.lastUpdated,
-                unreadCount: 0 // TODO: Implement unread count
-              };
-            })
-          );
+          const enrichedContacts = contactsData.map(user => {
+            const conversation = conversations.find(conv => 
+              conv.userIds.includes(user.uid)
+            );
+            
+            return {
+              ...user,
+              lastMessage: conversation?.lastMessage || '',
+              lastMessageTime: conversation?.lastUpdated,
+              unreadCount: 0 // TODO: Implement unread count
+            };
+          });
 
           // Sort by last message time
           enrichedContacts.sort((a, b) => {
@@ -188,27 +222,49 @@ export default function MessagingInterface() {
   };
 
   const addNewUser = async () => {
-    if (!newUserEmail.trim() || !newUserName.trim()) return;
+    if (!newUserEmail.trim()) return;
 
     try {
-      // Create a new user document (this would normally be done during registration)
-      const newUserId = 'user_' + Date.now(); // Simple ID generation
-      await setDoc(doc(db, 'users', newUserId), {
-        uid: newUserId,
-        name: newUserName.trim(),
-        email: newUserEmail.trim(),
-        online: false,
-        lastSeen: new Date()
-      });
+      // Search for user by email in Firebase users collection
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('email', '==', newUserEmail.trim().toLowerCase())
+      );
+      
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      if (usersSnapshot.empty) {
+        toast.error('User not found with this email address');
+        return;
+      }
+
+      const userData = usersSnapshot.docs[0].data();
+      const userUid = usersSnapshot.docs[0].id;
+
+      // Check if already added
+      const existingContact = contacts.find(contact => contact.uid === userUid);
+      if (existingContact) {
+        toast.error('User is already in your contacts');
+        return;
+      }
+
+      // Create a conversation to establish connection
+      const conversationId = [currentUser.uid, userUid].sort().join('_');
+      await setDoc(doc(db, 'conversations', conversationId), {
+        userIds: [currentUser.uid, userUid],
+        lastMessage: '',
+        lastUpdated: serverTimestamp(),
+        lastMessageSenderId: null
+      }, { merge: true });
 
       setNewUserEmail('');
       setNewUserName('');
       setShowAddUser(false);
       
-      // Refresh the page to show new user
-      window.location.reload();
+      toast.success(`${userData.name} added to your contacts!`);
     } catch (error) {
       console.error('Error adding user:', error);
+      toast.error('Failed to add user');
     }
   };
 
@@ -242,6 +298,16 @@ export default function MessagingInterface() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Logged out successfully');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to logout');
+    }
+  };
+
   if (!currentUser) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -265,13 +331,53 @@ export default function MessagingInterface() {
               <button
                 onClick={() => setShowAddUser(true)}
                 className="p-2 hover:bg-gray-100 rounded-full text-blue-500"
-                title="Add new user"
+                title="Add new contact"
               >
                 <UserPlus size={20} />
               </button>
-              <button className="p-2 hover:bg-gray-100 rounded-full">
-                <MoreVertical size={20} className="text-gray-600" />
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <MoreVertical size={20} className="text-gray-600" />
+                </button>
+                
+                {showUserMenu && (
+                  <div 
+                    ref={userMenuRef}
+                    className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50"
+                  >
+                    <div className="py-1">
+                      <div className="px-4 py-2 border-b border-gray-100">
+                        <p className="text-sm font-medium text-gray-900">{userProfile?.name || 'User'}</p>
+                        <p className="text-xs text-gray-500">{userProfile?.email}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          // Add profile settings functionality here
+                          toast.info('Profile settings coming soon!');
+                        }}
+                        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <Settings size={16} className="mr-3" />
+                        Settings
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          handleLogout();
+                        }}
+                        className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <LogOut size={16} className="mr-3" />
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
@@ -349,12 +455,25 @@ export default function MessagingInterface() {
               </div>
               
               <div className="flex items-center space-x-2">
-                <button className="p-2 hover:bg-gray-100 rounded-full">
-                  <Phone size={20} className="text-gray-600" />
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded-full">
-                  <Video size={20} className="text-gray-600" />
-                </button>
+                {selectedContact && !isCallActive ? (
+                  <CallInterface
+                    recipientId={selectedContact.uid}
+                    recipientName={selectedContact.name}
+                    onCallEnd={() => setIsCallActive(false)}
+                    onCallStart={() => setIsCallActive(true)}
+                  />
+                ) : isCallActive ? (
+                  <div className="text-sm text-gray-500">Call in progress...</div>
+                ) : (
+                  <>
+                    <button className="p-2 hover:bg-gray-100 rounded-full">
+                      <Phone size={20} className="text-gray-400" />
+                    </button>
+                    <button className="p-2 hover:bg-gray-100 rounded-full">
+                      <Video size={20} className="text-gray-400" />
+                    </button>
+                  </>
+                )}
                 <button className="p-2 hover:bg-gray-100 rounded-full">
                   <MoreVertical size={20} className="text-gray-600" />
                 </button>
@@ -445,7 +564,7 @@ export default function MessagingInterface() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Add New User</h2>
+              <h2 className="text-lg font-semibold">Add Contact</h2>
               <button
                 onClick={() => setShowAddUser(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -457,28 +576,18 @@ export default function MessagingInterface() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter user name"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
+                  Email Address
                 </label>
                 <input
                   type="email"
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter email address"
+                  placeholder="Enter email address of user to add"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  User must have an account with this email
+                </p>
               </div>
             </div>
             
@@ -491,10 +600,10 @@ export default function MessagingInterface() {
               </button>
               <button
                 onClick={addNewUser}
-                disabled={!newUserName.trim() || !newUserEmail.trim()}
+                disabled={!newUserEmail.trim()}
                 className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Add User
+                Add Contact
               </button>
             </div>
           </div>
