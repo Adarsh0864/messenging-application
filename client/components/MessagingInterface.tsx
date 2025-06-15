@@ -248,6 +248,12 @@ export default function MessagingInterface() {
         return;
       }
 
+      // Ensure currentUser exists
+      if (!currentUser) {
+        toast.error('You must be logged in to add contacts');
+        return;
+      }
+
       // Create a conversation to establish connection
       const conversationId = [currentUser.uid, userUid].sort().join('_');
       await setDoc(doc(db, 'conversations', conversationId), {
@@ -357,7 +363,7 @@ export default function MessagingInterface() {
                         onClick={() => {
                           setShowUserMenu(false);
                           // Add profile settings functionality here
-                          toast.info('Profile settings coming soon!');
+                          toast.success('Profile settings coming soon!');
                         }}
                         className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       >
