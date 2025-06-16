@@ -4,7 +4,7 @@ A modern, real-time messaging application built with Next.js, Express.js, Fireba
 
 
 
-## 🚀 Features
+## Features
 
 - **Real-time Messaging**: Send and receive messages instantly
 - **Voice & Video Calls**: WebRTC-powered calling with screen sharing
@@ -15,7 +15,7 @@ A modern, real-time messaging application built with Next.js, Express.js, Fireba
 - **Typing Indicators**: See when someone is typing
 - **Call Management**: Accept, reject, and end calls
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **Next.js 14** - React framework with App Router
