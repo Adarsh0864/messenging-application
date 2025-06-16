@@ -461,25 +461,12 @@ export default function MessagingInterface() {
               </div>
               
               <div className="flex items-center space-x-2">
-                {selectedContact && !isCallActive ? (
-                  <CallInterface
-                    recipientId={selectedContact.uid}
-                    recipientName={selectedContact.name}
-                    onCallEnd={() => setIsCallActive(false)}
-                    onCallStart={() => setIsCallActive(true)}
-                  />
-                ) : isCallActive ? (
-                  <div className="text-sm text-gray-500">Call in progress...</div>
-                ) : (
-                  <>
-                    <button className="p-2 hover:bg-gray-100 rounded-full">
-                      <Phone size={20} className="text-gray-400" />
-                    </button>
-                    <button className="p-2 hover:bg-gray-100 rounded-full">
-                      <Video size={20} className="text-gray-400" />
-                    </button>
-                  </>
-                )}
+                <CallInterface
+                  recipientId={selectedContact.uid}
+                  recipientName={selectedContact.name}
+                  onCallEnd={() => setIsCallActive(false)}
+                  onCallStart={() => setIsCallActive(true)}
+                />
                 <button className="p-2 hover:bg-gray-100 rounded-full">
                   <MoreVertical size={20} className="text-gray-600" />
                 </button>

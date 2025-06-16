@@ -39,22 +39,42 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd, o
   useEffect(() => {
     if (!currentUser) return;
 
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000');
-    setSocket(newSocket);
+    console.log('Initializing socket connection...');
+    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+    });
+    
+    newSocket.on('connect', () => {
+      console.log('Socket connected successfully');
+      setSocket(newSocket);
 
-    // Join with user data
-    newSocket.emit('join', {
-      uid: currentUser.uid,
-      name: userProfile?.name
+      // Join with user data
+      newSocket.emit('join', {
+        uid: currentUser.uid,
+        name: userProfile?.name
+      });
+      console.log('Joined with user data:', { uid: currentUser.uid, name: userProfile?.name });
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      alert('Unable to connect to server. Please check if the server is running.');
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('Socket disconnected');
     });
 
     // Listen for incoming calls
     newSocket.on('call:incoming', (data: IncomingCallData) => {
+      console.log('Incoming call received:', data);
       setIncomingCall(data);
     });
 
     // Listen for call accepted
     newSocket.on('call:accepted', (data: { signal: any }) => {
+      console.log('Call accepted');
       setCallAccepted(true);
       if (peer) {
         peer.signal(data.signal);
@@ -63,49 +83,81 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd, o
 
     // Listen for call rejected
     newSocket.on('call:rejected', () => {
+      console.log('Call rejected');
+      alert('Call was rejected by the recipient');
       endCall();
     });
 
     // Listen for call ended
     newSocket.on('call:ended', () => {
+      console.log('Call ended by remote user');
       endCall();
     });
 
     // Listen for ICE candidates
     newSocket.on('ice-candidate', (data: { candidate: any }) => {
+      console.log('ICE candidate received');
       if (peer) {
         peer.signal(data.candidate);
       }
     });
 
     return () => {
+      console.log('Cleaning up socket connection');
       newSocket.disconnect();
     };
-  }, [currentUser, userProfile?.name]);
+  }, [currentUser, userProfile?.name, peer]);
 
   const getUserMedia = async (video: boolean = true, audio: boolean = true) => {
     try {
+      console.log('Requesting media access:', { video, audio });
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: video,
+        video: video ? {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        } : false,
         audio: audio
       });
+      
+      console.log('Media stream obtained:', mediaStream);
       setStream(mediaStream);
       
-      if (localVideoRef.current) {
+      if (localVideoRef.current && video) {
         localVideoRef.current.srcObject = mediaStream;
+        console.log('Local video set');
       }
       
       return mediaStream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
+      
+      // Provide user-friendly error messages
+      const mediaError = error as DOMException;
+      if (mediaError.name === 'NotAllowedError') {
+        alert('Camera/microphone access denied. Please allow access and try again.');
+      } else if (mediaError.name === 'NotFoundError') {
+        alert('No camera or microphone found. Please check your devices.');
+      } else if (mediaError.name === 'NotReadableError') {
+        alert('Camera/microphone is being used by another application.');
+      } else {
+        alert(`Error accessing media devices: ${mediaError.message || 'Unknown error'}`);
+      }
+      
       throw error;
     }
   };
 
   const initiateCall = async (type: 'audio' | 'video') => {
-    if (!currentUser || !socket) return;
+    if (!currentUser || !socket) {
+      console.error('Missing currentUser or socket');
+      alert('Connection error. Please refresh the page and try again.');
+      return;
+    }
 
     try {
+      console.log('Initiating call:', type);
       setCallType(type);
       setIsCallActive(true);
       setConnectionState('connecting');
@@ -116,10 +168,17 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd, o
       const newPeer = new Peer({
         initiator: true,
         trickle: false,
-        stream: mediaStream
+        stream: mediaStream,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
       });
 
       newPeer.on('signal', (signal) => {
+        console.log('Sending call signal');
         socket.emit('call:initiate', {
           to: recipientId,
           from: currentUser.uid,
@@ -130,6 +189,7 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd, o
       });
 
       newPeer.on('stream', (remoteStream) => {
+        console.log('Received remote stream');
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
         }
@@ -137,11 +197,13 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd, o
       });
 
       newPeer.on('connect', () => {
+        console.log('Peer connected');
         setConnectionState('connected');
       });
 
       newPeer.on('error', (error) => {
         console.error('Peer error:', error);
+        alert(`Call failed: ${error.message}`);
         endCall();
       });
 
