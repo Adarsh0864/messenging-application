@@ -5,26 +5,29 @@ import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 const router = Router();
 
 // Get messages for a conversation
-router.get('/:conversationId', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.get('/:conversationId', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { conversationId } = req.params;
     const { limit = 50, offset = 0 } = req.query;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     // Verify user is part of conversation
     const conversationDoc = await db.collection('conversations').doc(conversationId).get();
     
     if (!conversationDoc.exists) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      res.status(404).json({ message: 'Conversation not found' });
+      return;
     }
 
     const conversationData = conversationDoc.data();
     if (!conversationData?.userIds.includes(currentUserUid)) {
-      return res.status(403).json({ message: 'Access denied' });
+      res.status(403).json({ message: 'Access denied' });
+      return;
     }
 
     // Get messages
@@ -53,29 +56,33 @@ router.get('/:conversationId', authMiddleware, async (req: AuthenticatedRequest,
 });
 
 // Send a message
-router.post('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.post('/', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { conversationId, text, receiverId } = req.body;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     if (!conversationId || !text || !receiverId) {
-      return res.status(400).json({ message: 'Missing required fields' });
+      res.status(400).json({ message: 'Missing required fields' });
+      return;
     }
 
     // Verify user is part of conversation
     const conversationDoc = await db.collection('conversations').doc(conversationId).get();
     
     if (!conversationDoc.exists) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      res.status(404).json({ message: 'Conversation not found' });
+      return;
     }
 
     const conversationData = conversationDoc.data();
     if (!conversationData?.userIds.includes(currentUserUid)) {
-      return res.status(403).json({ message: 'Access denied' });
+      res.status(403).json({ message: 'Access denied' });
+      return;
     }
 
     // Create message
@@ -110,25 +117,28 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
 });
 
 // Mark messages as read
-router.put('/:conversationId/read', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.put('/:conversationId/read', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { conversationId } = req.params;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     // Verify user is part of conversation
     const conversationDoc = await db.collection('conversations').doc(conversationId).get();
     
     if (!conversationDoc.exists) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      res.status(404).json({ message: 'Conversation not found' });
+      return;
     }
 
     const conversationData = conversationDoc.data();
     if (!conversationData?.userIds.includes(currentUserUid)) {
-      return res.status(403).json({ message: 'Access denied' });
+      res.status(403).json({ message: 'Access denied' });
+      return;
     }
 
     // Mark unread messages as read
@@ -155,18 +165,20 @@ router.put('/:conversationId/read', authMiddleware, async (req: AuthenticatedReq
 });
 
 // Delete a message
-router.delete('/:messageId', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.delete('/:messageId', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { messageId } = req.params;
     const { conversationId } = req.body;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     if (!conversationId) {
-      return res.status(400).json({ message: 'Conversation ID is required' });
+      res.status(400).json({ message: 'Conversation ID is required' });
+      return;
     }
 
     // Get message to verify ownership
@@ -178,12 +190,14 @@ router.delete('/:messageId', authMiddleware, async (req: AuthenticatedRequest, r
       .get();
 
     if (!messageDoc.exists) {
-      return res.status(404).json({ message: 'Message not found' });
+      res.status(404).json({ message: 'Message not found' });
+      return;
     }
 
     const messageData = messageDoc.data();
     if (messageData?.senderId !== currentUserUid) {
-      return res.status(403).json({ message: 'Can only delete your own messages' });
+      res.status(403).json({ message: 'Can only delete your own messages' });
+      return;
     }
 
     // Delete message

@@ -5,11 +5,12 @@ import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 const router = Router();
 
 // Get all users (for contacts list)
-router.get('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.get('/', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     const usersSnapshot = await db.collection('users').get();
@@ -25,13 +26,14 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
 });
 
 // Get user profile
-router.get('/profile/:uid', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.get('/profile/:uid', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const { uid } = req.params;
     const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      return res.status(404).json({ message: 'User not found' });
+      res.status(404).json({ message: 'User not found' });
+      return;
     }
 
     const userData = { id: userDoc.id, ...userDoc.data() };
@@ -43,11 +45,12 @@ router.get('/profile/:uid', authMiddleware, async (req: AuthenticatedRequest, re
 });
 
 // Update user profile
-router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     const { name, status } = req.body;
@@ -68,11 +71,12 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res) =>
 });
 
 // Update online status
-router.post('/status', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.post('/status', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     const { online } = req.body;

@@ -5,11 +5,12 @@ import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 const router = Router();
 
 // Get all conversations for current user
-router.get('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.get('/', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     const conversationsSnapshot = await db
@@ -31,25 +32,28 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
 });
 
 // Get specific conversation
-router.get('/:conversationId', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.get('/:conversationId', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { conversationId } = req.params;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     // Check if user is part of the conversation
     const conversationDoc = await db.collection('conversations').doc(conversationId).get();
     
     if (!conversationDoc.exists) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      res.status(404).json({ message: 'Conversation not found' });
+      return;
     }
 
     const conversationData = conversationDoc.data();
     if (!conversationData?.userIds.includes(currentUserUid)) {
-      return res.status(403).json({ message: 'Access denied' });
+      res.status(403).json({ message: 'Access denied' });
+      return;
     }
 
     res.json({ id: conversationDoc.id, ...conversationData });
@@ -60,17 +64,19 @@ router.get('/:conversationId', authMiddleware, async (req: AuthenticatedRequest,
 });
 
 // Create new conversation
-router.post('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.post('/', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { participantUid } = req.body;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     if (!participantUid) {
-      return res.status(400).json({ message: 'Participant UID is required' });
+      res.status(400).json({ message: 'Participant UID is required' });
+      return;
     }
 
     // Check if conversation already exists
@@ -85,7 +91,8 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
     });
 
     if (existingConversation) {
-      return res.json({ id: existingConversation.id, ...existingConversation.data() });
+      res.json({ id: existingConversation.id, ...existingConversation.data() });
+      return;
     }
 
     // Create new conversation
@@ -105,26 +112,29 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res) => {
 });
 
 // Update conversation (last message, etc.)
-router.put('/:conversationId', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.put('/:conversationId', authMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   try {
     const currentUserUid = req.user?.uid;
     const { conversationId } = req.params;
     const { lastMessage } = req.body;
 
     if (!currentUserUid) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
     }
 
     // Verify user is part of conversation
     const conversationDoc = await db.collection('conversations').doc(conversationId).get();
     
     if (!conversationDoc.exists) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      res.status(404).json({ message: 'Conversation not found' });
+      return;
     }
 
     const conversationData = conversationDoc.data();
     if (!conversationData?.userIds.includes(currentUserUid)) {
-      return res.status(403).json({ message: 'Access denied' });
+      res.status(403).json({ message: 'Access denied' });
+      return;
     }
 
     // Update conversation

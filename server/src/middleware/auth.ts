@@ -18,7 +18,8 @@ export const authMiddleware = async (
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Unauthorized: No token provided' });
+      res.status(401).json({ message: 'Unauthorized: No token provided' });
+      return;
     }
 
     const token = authHeader.split(' ')[1];
@@ -35,7 +36,8 @@ export const authMiddleware = async (
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
-    return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    return;
   }
 };
 

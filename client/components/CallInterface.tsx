@@ -40,7 +40,7 @@ export default function CallInterface({ recipientId, recipientName, onCallEnd, o
     if (!currentUser) return;
 
     console.log('Initializing socket connection...');
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
+    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000', {
       transports: ['websocket', 'polling'],
       timeout: 20000,
     });
