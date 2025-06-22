@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import MessagingInterface from '@/components/MessagingInterface';
 
+
 export default function HomePage() {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
@@ -27,5 +28,9 @@ export default function HomePage() {
     return null;
   }
 
-  return <MessagingInterface />;
+  return (
+    <>
+      <MessagingInterface />
+    </>
+  );
 } 
