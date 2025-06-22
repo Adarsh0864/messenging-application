@@ -26,6 +26,19 @@ interface UserProfile {
   email: string;
   lastSeen: any;
   online: boolean;
+  bio?: string;
+  phoneNumber?: string;
+  profilePicture?: string;
+  preferences?: {
+    notifications?: boolean;
+    soundEnabled?: boolean;
+    theme?: string;
+    language?: string;
+    autoDownload?: boolean;
+    readReceipts?: boolean;
+    lastSeen?: boolean;
+    profilePhotoVisibility?: string;
+  };
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
