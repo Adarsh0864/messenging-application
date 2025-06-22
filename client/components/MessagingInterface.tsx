@@ -16,11 +16,17 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Search, Phone, Video, MoreVertical, Send, Paperclip, Smile, UserPlus, LogOut, Settings, User } from 'lucide-react';
+import { Search, Phone, Video, MoreVertical, Send, UserPlus, LogOut, Settings as SettingsIcon, User, RefreshCw } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import LoadingSpinner from './LoadingSpinner';
 import { toast } from 'react-hot-toast';
 import CallInterface from './CallInterface';
+import FileMessage from './FileMessage';
+import Settings from './Settings';
+import WhatsAppMessageInput from './WhatsAppMessageInput';
+
+import { CloudinaryUploadedFile, getFileCategory, formatFileSize } from '@/lib/cloudinaryUpload';
+import { useSocket } from './SocketProvider';
 
 interface Message {
   id: string;
@@ -29,6 +35,10 @@ interface Message {
   receiverId: string;
   timestamp: any;
   conversationId: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
 }
 
 interface Contact {
@@ -52,10 +62,10 @@ interface Conversation {
 
 export default function MessagingInterface() {
   const { currentUser, userProfile, logout } = useAuth();
+  const { socket, isConnected } = useSocket();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
@@ -63,6 +73,7 @@ export default function MessagingInterface() {
   const [newUserName, setNewUserName] = useState('');
   const [isCallActive, setIsCallActive] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -192,32 +203,48 @@ export default function MessagingInterface() {
     return () => unsubscribe();
   }, [currentUser, selectedContact]);
 
-  const sendMessage = async () => {
-    if (!currentUser || !selectedContact || !newMessage.trim()) return;
+  const sendMessage = async (fileData: CloudinaryUploadedFile) => {
+    if (!currentUser || !selectedContact || !fileData) return;
 
     try {
       const conversationId = [currentUser.uid, selectedContact.uid].sort().join('_');
       
-      // Add message to subcollection
-      await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-        text: newMessage.trim(),
+      const messageData: any = {
+        text: `Shared ${fileData.name}`,
         senderId: currentUser.uid,
         receiverId: selectedContact.uid,
         timestamp: serverTimestamp(),
-        conversationId
-      });
+        conversationId,
+        fileUrl: fileData.url,
+        fileName: fileData.name,
+        fileSize: fileData.size,
+        fileType: fileData.type,
+        // Additional Cloudinary-specific data
+        publicId: fileData.publicId,
+        resourceType: fileData.resourceType,
+        format: fileData.format,
+        // Only include optional fields if they exist
+        ...(fileData.width && { width: fileData.width }),
+        ...(fileData.height && { height: fileData.height }),
+        ...(fileData.duration && { duration: fileData.duration })
+      };
+
+      // Add message to subcollection
+      await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageData);
 
       // Update or create conversation document
+      const lastMessage = `📎 ${fileData.name}`;
+
       await setDoc(doc(db, 'conversations', conversationId), {
         userIds: [currentUser.uid, selectedContact.uid],
-        lastMessage: newMessage.trim(),
+        lastMessage,
         lastUpdated: serverTimestamp(),
         lastMessageSenderId: currentUser.uid
       }, { merge: true });
 
-      setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
+      toast.error('Failed to send message');
     }
   };
 
@@ -362,12 +389,11 @@ export default function MessagingInterface() {
                       <button
                         onClick={() => {
                           setShowUserMenu(false);
-                          // Add profile settings functionality here
-                          toast.success('Profile settings coming soon!');
+                          setShowSettings(true);
                         }}
                         className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       >
-                        <Settings size={16} className="mr-3" />
+                        <SettingsIcon size={16} className="mr-3" />
                         Settings
                       </button>
                       <button
@@ -454,13 +480,29 @@ export default function MessagingInterface() {
                 </div>
                 <div className="ml-3">
                   <h2 className="font-medium text-gray-900">{selectedContact.name}</h2>
-                  <p className="text-sm text-gray-500">
-                    {selectedContact.online ? 'Online' : 'Offline'}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm text-gray-500">
+                      {selectedContact.online ? 'Online' : 'Offline'}
+                    </p>
+                    {!isConnected && (
+                      <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
+                        Offline Mode
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               
               <div className="flex items-center space-x-2">
+                {!isConnected && (
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="p-2 hover:bg-gray-100 rounded-full text-orange-600"
+                    title="Refresh to check for new messages"
+                  >
+                    <RefreshCw size={18} />
+                  </button>
+                )}
                 <CallInterface
                   recipientId={selectedContact.uid}
                   recipientName={selectedContact.name}
@@ -499,10 +541,23 @@ export default function MessagingInterface() {
                       className={`flex ${message.senderId === currentUser.uid ? 'justify-end' : 'justify-start'}`}
                     >
                       <div className={`chat-message ${message.senderId === currentUser.uid ? 'sent' : 'received'}`}>
-                        <p className="text-sm">{message.text}</p>
-                        <div className="text-xs opacity-70 mt-1">
-                          {formatTime(message.timestamp)}
-                        </div>
+                        {message.fileUrl ? (
+                          <FileMessage
+                            fileUrl={message.fileUrl}
+                            fileName={message.fileName || 'Unknown File'}
+                            fileSize={message.fileSize || 0}
+                            fileType={message.fileType || 'application/octet-stream'}
+                            timestamp={message.timestamp}
+                            formatTime={formatTime}
+                          />
+                        ) : (
+                          <>
+                            <p className="text-sm">{message.text}</p>
+                            <div className="text-xs opacity-70 mt-1">
+                              {formatTime(message.timestamp)}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -511,33 +566,42 @@ export default function MessagingInterface() {
               )}
             </div>
 
-            {/* Message Input */}
-            <div className="bg-white border-t border-gray-200 p-4">
-              <div className="flex items-center space-x-2">
-                <button className="p-2 hover:bg-gray-100 rounded-full">
-                  <Paperclip size={20} className="text-gray-600" />
-                </button>
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                    className="w-full px-4 py-2 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-200 rounded-full">
-                    <Smile size={18} className="text-gray-600" />
-                  </button>
-                </div>
-                <button
-                  onClick={sendMessage}
-                  className="p-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-                >
-                  <Send size={18} />
-                </button>
-              </div>
-            </div>
+            
+
+            {/* WhatsApp-style Message Input */}
+            <WhatsAppMessageInput
+              onSendMessage={async (message, file) => {
+                if (message) {
+                  // Send text message
+                  try {
+                    const conversationId = [currentUser.uid, selectedContact.uid].sort().join('_');
+                    
+                    await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+                      text: message,
+                      senderId: currentUser.uid,
+                      receiverId: selectedContact.uid,
+                      timestamp: serverTimestamp(),
+                      conversationId
+                    });
+
+                    await setDoc(doc(db, 'conversations', conversationId), {
+                      userIds: [currentUser.uid, selectedContact.uid],
+                      lastMessage: message,
+                      lastUpdated: serverTimestamp(),
+                      lastMessageSenderId: currentUser.uid
+                    }, { merge: true });
+
+                  } catch (error) {
+                    console.error('Error sending message:', error);
+                    toast.error('Failed to send message');
+                  }
+                } else if (file) {
+                  // Send file message
+                  sendMessage(file);
+                }
+              }}
+              userId={currentUser.uid}
+            />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -601,6 +665,13 @@ export default function MessagingInterface() {
             </div>
           </div>
         </div>
+      )}
+
+
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <Settings onClose={() => setShowSettings(false)} />
       )}
     </div>
   );
