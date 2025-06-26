@@ -1,9 +1,13 @@
 import { toast } from 'react-hot-toast';
 
 // Cloudinary configuration
-const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'your-cloud-name';
-const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'your-upload-preset';
-// Note: API key not needed for unsigned uploads
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+// Check if Cloudinary is configured
+if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+  console.warn('⚠️ Cloudinary not configured. Please set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET in your .env.local file');
+}
 
 export interface CloudinaryUploadProgress {
   progress: number;
@@ -91,6 +95,12 @@ export const uploadToCloudinary = (
   onProgress?: (progress: CloudinaryUploadProgress) => void
 ): Promise<CloudinaryUploadedFile> => {
   return new Promise((resolve, reject) => {
+    // Check if Cloudinary is configured
+    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      reject(new Error('Cloudinary not configured. Please check SETUP_CLOUDINARY.md for instructions.'));
+      return;
+    }
+
     // Validate file
     const validation = validateFile(file);
     if (!validation.valid) {

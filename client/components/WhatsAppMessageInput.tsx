@@ -2,8 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Send, Paperclip, X } from 'lucide-react';
-import QuickFileUpload from './QuickFileUpload';
-import { UploadedFile } from '@/lib/fileUpload';
+import WhatsAppAttachMenu from './WhatsAppAttachMenu';
 
 interface WhatsAppMessageInputProps {
   onSendMessage: (message: string, file?: any) => Promise<void>;
@@ -34,22 +33,10 @@ export default function WhatsAppMessageInput({ onSendMessage, userId }: WhatsApp
     }
   };
 
-  const handleFileUpload = async (file: UploadedFile) => {
+  const handleFileUpload = async (file: any) => {
     setIsLoading(true);
     try {
-      // Convert UploadedFile to the format expected by the messaging interface
-      const cloudinaryFile = {
-        url: file.url,
-        publicId: '', // Not available from Firebase upload
-        format: file.type.split('/')[1] || 'unknown',
-        resourceType: file.type.startsWith('image/') ? 'image' as const : 
-                     file.type.startsWith('video/') ? 'video' as const : 'raw' as const,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      };
-      
-      await onSendMessage('', cloudinaryFile);
+      await onSendMessage('', file);
       setShowFileUpload(false);
     } catch (error) {
       console.error('Error sending file:', error);
@@ -129,7 +116,7 @@ export default function WhatsAppMessageInput({ onSendMessage, userId }: WhatsApp
               </button>
             </div>
             
-            <QuickFileUpload
+            <WhatsAppAttachMenu
               onFileUploaded={handleFileUpload}
               userId={userId}
             />
